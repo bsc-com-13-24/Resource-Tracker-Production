@@ -22,7 +22,6 @@ Clone the separate deployment repository and enter its directory:
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/Resource-Tracker-Docker.git
-cd Resource-Tracker-Docker
 ```
 
 The directory must contain:
