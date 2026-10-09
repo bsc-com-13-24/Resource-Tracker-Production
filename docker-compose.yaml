@@ -1,0 +1,44 @@
+services:
+  # database
+  mysql:
+    image: mysql:8.0
+    container_name: resource-tracker-dbms
+    environment:
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_HOST_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 20
+      interval: 5s
+      start_period: 5m
+
+
+  # backend
+  backend:
+    image: jeckman/resource-tracker-backend:v1
+    container_name: resource-tracker-backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8080}:8080"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      APP_SECURITY_JWT_SECRET: ${APP_SECURITY_JWT_SECRET}
+      DATABASE_URL: jdbc:mysql://mysql:${DB_PORT}/${DB_NAME}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      DATASOURCE_USERNAME: ${DB_USER}
+      DATASOURCE_PASSWORD: ${DB_PASSWORD}
+
+volumes:
+  mysql_data:
