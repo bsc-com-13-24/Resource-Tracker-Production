@@ -1,227 +1,104 @@
-# Resource Tracker Docker Deployment
+# Run Resource Tracker with Docker Compose
 
-This guide explains how to run the Resource Tracker backend and MySQL database using the published Docker image:
-
-```text
-jeckman/resource-tracker-backend:v1
-```
-
-The deployment repository contains only the Docker Compose configuration and instructions. Users do not need the Resource Tracker source code, Java, Maven, Kotlin, or a local MySQL installation.
+This Compose setup runs the Resource Tracker backend and MySQL. Docker Compose reads configuration from `.env` in the same directory as `docker-compose.yaml`.
 
 ## Requirements
 
-Install:
-
 - Docker Engine or Docker Desktop
 - Docker Compose v2
-- Internet access for the first startup, so Docker can pull the backend and MySQL images
-
-## Get the deployment files
-
-Clone the separate deployment repository and enter its directory:
-
-```bash
-git clone https://github.com/YOUR_USERNAME/Resource-Tracker-Docker.git
-```
-
-The directory must contain:
-
-```text
-docker-compose.yaml
-DOCKER-COMPOSE-USAGE.md
-.env
-```
+- Internet access for the first run, so Docker can pull the images
 
 ## Configure the environment
 
-Create a file named `.env` in the same directory as `docker-compose.yaml`:
-
-```env
-DB_NAME=resource_tracker
-DB_USER=root
-DB_PASSWORD=replace-with-a-strong-password
-DB_HOST_PORT=3307
-PORT=8080
-APP_SECURITY_JWT_SECRET=replace-with-a-long-random-secret-at-least-32-characters
-```
-
-Keep `.env` private. Do not commit it to source control or share its passwords and JWT secret.
-
-If the repository includes an `.env.example` file, create `.env` from it:
+From the `resource-tracker` directory, create your local `.env` file from the example:
 
 ```bash
 cp .env.example .env
 ```
 
-Replace all placeholder values before starting the services. Use a different strong value for `APP_SECURITY_JWT_SECRET`; do not reuse the database password.
+Edit `.env` and replace the example database password and JWT secret. Use a unique, random JWT secret (at least 32 characters); for example, generate one with:
 
-`DB_HOST_PORT` and `PORT` are the ports exposed on the host computer:
+```bash
+openssl rand -base64 48
+```
 
-- MySQL is available from the host at `localhost:3307`.
-- The backend is available from the host at `localhost:8080`.
+Keep `.env` private and do not commit it. `DB_PASSWORD` is used for both the MySQL root account and the application database user in this Compose configuration. For production, use a dedicated secret management system and distinct database credentials.
 
-The backend connects to MySQL internally through the Compose service name `mysql` on port `3306`. Do not change the internal database host to `localhost`.
+The Compose configuration uses the `mysql` service name and port `3306` for backend-to-database connections. The host ports are configurable separately:
+
+- `PORT` exposes the backend on the host (default `8080`).
+- `DB_HOST_PORT` exposes MySQL on the host (default `3307`).
+
+The backend does not use `DB_HOST` or `DB_PORT` from `.env`; Compose supplies the internal host and port. Optional mail settings are used for SMTP delivery. Set them in `.env` if you need email features.
 
 ## Start the services
 
-From the deployment repository directory, run:
+Run these commands from `resource-tracker`:
 
 ```bash
 docker compose up -d
 ```
 
-Compose pulls `jeckman/resource-tracker-backend:v1` automatically. Do not run `docker build` or Maven commands on the deployment machine.
+Compose pulls the backend image and MySQL image if needed. MySQL must pass its TCP healthcheck before Compose starts the backend. Flyway applies database migrations when the backend starts.
 
-To see the startup logs instead:
+To watch startup output in the terminal, use:
 
 ```bash
 docker compose up
 ```
 
-The first startup can take several minutes while MySQL initializes its data directory. Compose waits for MySQL to become healthy before starting the backend.
-
 ## Check the services
-
-List the service status:
 
 ```bash
 docker compose ps
-```
-
-View backend logs:
-
-```bash
 docker compose logs -f backend
 ```
 
-Check the application health endpoint:
-
-```bash
-curl http://localhost:8080/actuator/health
-```
-
-An available and healthy application returns a response similar to:
-
-```json
-{"groups":["liveness","readiness"],"status":"UP"}
-```
-
-The interactive API documentation is available at:
-
-```text
-http://localhost:8080/swagger-ui/index.html
-```
-
-If the backend host port was changed, replace `8080` in the URLs above with the configured `PORT` value.
-
-## Use the API
-
-Most API endpoints require a JWT access token. First authenticate through the login endpoint:
-
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"your-password"}'
-```
-
-Copy the `accessToken` from the response and use it as a bearer token:
-
-```bash
-curl http://localhost:8080/api/v1/projects \
-  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
-```
-
-The project, vendor, department, and user management endpoints require an authenticated user with the appropriate role. The administrative management endpoints are restricted to administrators.
-
-Examples:
-
-```text
-GET    /api/v1/projects
-POST   /api/v1/projects
-GET    /api/vendors
-POST   /api/vendors
-GET    /api/departments
-POST   /api/departments
-GET    /api/v1/users
-```
-
-Refer to Swagger UI for each endpoint's request body, query parameters, response format, and authorization requirements.
+The API is available at `http://localhost:8080` by default, and Swagger UI is at `http://localhost:8080/swagger-ui/index.html`. If you changed `PORT`, use that host port instead. The health endpoint is `http://localhost:8080/actuator/health`.
 
 ## Change host ports
 
-If port `8080` is already in use, start the backend on another host port:
+Edit `PORT` or `DB_HOST_PORT` in `.env`, then recreate the containers:
 
 ```bash
-PORT=8081 docker compose up -d
+docker compose up -d --force-recreate
 ```
 
-The API is then available at `http://localhost:8081`.
-
-If port `3307` is already in use, change the MySQL host port as well:
-
-```bash
-DB_HOST_PORT=3308 PORT=8081 docker compose up -d
-```
-
-These overrides apply to the current command. To make them permanent, update the values in `.env`.
+MySQL remains available to the backend on its internal port `3306`, regardless of the host port.
 
 ## Stop the services
 
-Stop and remove the containers while preserving database data:
+Stop and remove the containers while preserving the database volume:
 
 ```bash
 docker compose down
 ```
 
-The database is stored in the named `mysql_data` volume and will be available the next time the services start.
-
-To remove the containers and the database volume:
+To delete the database volume and all stored data as well:
 
 ```bash
 docker compose down -v
 ```
 
-Use `docker compose down -v` only when deleting the database data is intentional.
+Only use `down -v` when deleting the database data is intentional.
 
-## Update to a newer image
+## Update the backend image
 
-When a newer backend tag is published, update the `image` value for the `backend` service in `docker-compose.yaml`. Then pull and recreate the backend:
+The Compose file currently uses `jeckman/resource-tracker-backend:v1`. To pull that tag again and recreate the backend:
 
 ```bash
 docker compose pull backend
 docker compose up -d backend
 ```
 
-For example:
-
-```yaml
-backend:
-  image: jeckman/resource-tracker-backend:v2
-```
-
-Database migrations run automatically when the updated backend starts.
-
 ## Troubleshooting
 
-### MySQL is still starting
-
-Check the database logs:
+Inspect service status and logs:
 
 ```bash
+docker compose ps
 docker compose logs mysql
+docker compose logs backend
 ```
 
-Wait for `docker compose ps` to show the MySQL service as `healthy`.
-
-### A host port is already in use
-
-Use different host ports as described in [Change host ports](#change-host-ports). The internal Compose ports remain unchanged.
-
-### The backend cannot connect to MySQL
-
-Confirm that:
-
-- Both services are started with `docker compose ps`.
-- MySQL is marked `healthy`.
-- `DB_NAME`, `DB_USER`, and `DB_PASSWORD` match between the Compose configuration and `.env`.
-- The backend uses `mysql` as its database host inside Compose.
+If the backend cannot connect to MySQL, confirm that MySQL reaches `healthy`, and that `DB_NAME`, `DB_USER`, and `DB_PASSWORD` in `.env` agree with the MySQL container's initial setup. MySQL image initialization variables only take effect when the data directory is first created; changing credentials in `.env` does not change users in an existing `mysql_data` volume. Preserve the volume and update its MySQL users if the data matters. Remove it with `docker compose down -v` only if it is safe to delete all database data.
