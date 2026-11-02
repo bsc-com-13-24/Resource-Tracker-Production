@@ -12,6 +12,7 @@ services:
       - "${DB_HOST_PORT:-3307}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    command: --log-bin-trust-function-creators=1  
     healthcheck:
       # Check the TCP listener used by the backend, not only MySQL's local socket.
       test: ["CMD-SHELL", "mysqladmin ping --host=127.0.0.1 --user=root --password=\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
@@ -23,7 +24,7 @@ services:
 
   # backend
   backend:
-    image: jeckman/resource-tracker-backend:v1
+    image: jeckman/resource-tracker-backend:v2
     container_name: resource-tracker-backend
     depends_on:
       mysql:
