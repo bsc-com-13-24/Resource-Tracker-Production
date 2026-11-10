@@ -24,7 +24,7 @@ services:
 
   # backend
   backend:
-    image: jeckman/resource-tracker-backend:v6
+    image: jeckman/resource-tracker-backend:v7
     container_name: resource-tracker-backend
     depends_on:
       mysql:
